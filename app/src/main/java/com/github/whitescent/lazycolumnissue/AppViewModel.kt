@@ -7,13 +7,12 @@ import com.github.whitescent.lazycolumnissue.database.AccountEntity
 import com.github.whitescent.lazycolumnissue.database.AppDatabase
 import com.github.whitescent.lazycolumnissue.database.TimelineEntity
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -27,25 +26,22 @@ class AppViewModel @Inject constructor(
   private val timelineDao = db.timelineDao()
   private val accountDao = db.accountDao()
 
-  val activeAccountFlow = accountDao
+  private val activeAccountFlow = accountDao
     .getActiveAccountFlow()
     .filterNotNull()
     .distinctUntilChanged { old, new -> old.id == new.id }
 
-  val timelinePosition = activeAccountFlow
-    .mapLatest { TimelinePosition(it.index, it.offset) }
+  val combinedFlow = activeAccountFlow
+    .flatMapLatest { activeAccount ->
+      val timelineFlow = timelineDao.getStatusListWithFlow(activeAccount.id)
+      timelineFlow.map {
+        UiState(activeAccount.id, it, TimelinePosition(activeAccount.index, activeAccount.offset))
+      }
+    }
     .stateIn(
       scope = viewModelScope,
       started = SharingStarted.WhileSubscribed(),
-      initialValue = TimelinePosition()
-    )
-
-  val timeline = activeAccountFlow
-    .flatMapLatest { timelineDao.getStatusListWithFlow(it.id) }
-    .stateIn(
-      scope = viewModelScope,
-      started = SharingStarted.WhileSubscribed(),
-      initialValue = persistentListOf()
+      initialValue = null
     )
 
   fun addAccount1() {
@@ -82,7 +78,7 @@ class AppViewModel @Inject constructor(
   fun addTimeline() {
     viewModelScope.launch {
       val current = accountDao.getActiveAccount()!!
-      val size = timelineDao.getStatusListWith(current.id).size
+      val size = timelineDao.getStatusList(current.id).size
       timelineDao.insertAll(
         timelineEntity = (size..size + 20).toList().map { TimelineEntity(0, "${current.username} $it", current.id) }
       )
@@ -98,6 +94,12 @@ class AppViewModel @Inject constructor(
     }
   }
 }
+
+data class UiState(
+  val id: Long,
+  val timeline: List<TimelineEntity>,
+  val position: TimelinePosition
+)
 
 data class TimelinePosition(
   val index: Int = 0,

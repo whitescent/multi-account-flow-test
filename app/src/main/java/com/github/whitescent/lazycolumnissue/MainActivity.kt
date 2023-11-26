@@ -20,6 +20,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -43,17 +44,7 @@ class MainActivity : ComponentActivity() {
     setContent {
       LazyColumnIssueTheme {
         val viewModel: AppViewModel = hiltViewModel()
-        val activeAccount by viewModel.activeAccountFlow.collectAsStateWithLifecycle(null)
-        val timeline by viewModel.timeline.collectAsStateWithLifecycle()
-        val timelinePosition by viewModel.timelinePosition.collectAsStateWithLifecycle()
-        val lazyState = remember(timeline, timelinePosition) {
-          logcat("TEST") { "init ${timelinePosition.index}" }
-          LazyListState(timelinePosition.index, timelinePosition.offset)
-        }
-        logcat("TEST") { "after init lazy ${lazyState.firstVisibleItemIndex}" }
-        val firstVisibleIndex by remember(lazyState) {
-          derivedStateOf { lazyState.firstVisibleItemIndex }
-        }
+        val uiState by viewModel.combinedFlow.collectAsStateWithLifecycle()
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
           Row {
             Button(onClick = { viewModel.addAccount1() }) {
@@ -65,9 +56,20 @@ class MainActivity : ComponentActivity() {
             Button(onClick = { viewModel.addTimeline() }) {
             }
           }
-          activeAccount?.let {
+          uiState?.let {
+            val timeline = uiState?.timeline
+            val timelinePosition = uiState?.position
+
+            val lazyState = rememberSaveable(uiState?.id, saver = LazyListState.Saver) {
+              logcat("TEST") { "init ${timelinePosition?.index}" }
+              LazyListState(timelinePosition!!.index, timelinePosition.offset)
+            }
+            logcat("TEST") { "after init lazy ${lazyState.firstVisibleItemIndex}" }
+            val firstVisibleIndex by remember {
+              derivedStateOf { lazyState.firstVisibleItemIndex }
+            }
             LazyColumn(state = lazyState) {
-              items(timeline) {
+              items(timeline!!) {
                 Box(Modifier.fillMaxWidth().height(100.dp).background(Color.Gray)) {
                   Text(
                     text = it.content,

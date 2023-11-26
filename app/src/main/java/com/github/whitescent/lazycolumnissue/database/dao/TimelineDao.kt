@@ -27,7 +27,7 @@ interface TimelineDao {
   fun getStatusListWithFlow(accountId: Long): Flow<List<TimelineEntity>>
 
   @Query("SELECT * FROM timelineentity WHERE accountId = :accountId")
-  suspend fun getStatusListWith(accountId: Long): List<TimelineEntity>
+  suspend fun getStatusList(accountId: Long): List<TimelineEntity>
 
   @Query("DELETE FROM timelineentity WHERE accountId = :accountId")
   suspend fun clearAll(accountId: Long)
